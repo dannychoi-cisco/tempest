@@ -18,7 +18,6 @@ from tempest.api.object_storage import base
 from tempest import clients
 from tempest.common.utils import data_utils
 from tempest import config
-from tempest import exceptions
 from tempest import test
 
 CONF = config.CONF
@@ -27,37 +26,14 @@ CONF = config.CONF
 class AccountQuotasTest(base.BaseObjectTest):
 
     @classmethod
-    @test.safe_setup
-    def setUpClass(cls):
-        super(AccountQuotasTest, cls).setUpClass()
+    def resource_setup(cls):
+        super(AccountQuotasTest, cls).resource_setup()
         cls.container_name = data_utils.rand_name(name="TestContainer")
         cls.container_client.create_container(cls.container_name)
 
-        cls.data.setup_test_user()
+        cls.data.setup_test_user(reseller=True)
 
         cls.os_reselleradmin = clients.Manager(cls.data.test_credentials)
-
-        # Retrieve the ResellerAdmin role id
-        reseller_role_id = None
-        try:
-            _, roles = cls.os_admin.identity_client.list_roles()
-            reseller_role_id = next(r['id'] for r in roles if r['name']
-                                    == CONF.object_storage.reseller_admin_role)
-        except StopIteration:
-            msg = "No ResellerAdmin role found"
-            raise exceptions.NotFound(msg)
-
-        # Retrieve the ResellerAdmin user id
-        reseller_user_id = cls.data.test_credentials.user_id
-
-        # Retrieve the ResellerAdmin tenant id
-        reseller_tenant_id = cls.data.test_credentials.tenant_id
-
-        # Assign the newly created user the appropriate ResellerAdmin role
-        cls.os_admin.identity_client.assign_user_role(
-            reseller_tenant_id,
-            reseller_user_id,
-            reseller_role_id)
 
         # Retrieve a ResellerAdmin auth data and use it to set a quota
         # on the client's account
@@ -67,38 +43,37 @@ class AccountQuotasTest(base.BaseObjectTest):
     def setUp(self):
         super(AccountQuotasTest, self).setUp()
 
-        # Set the reselleradmin auth in headers for next custom_account_client
+        # Set the reselleradmin auth in headers for next account_client
         # request
-        self.custom_account_client.auth_provider.set_alt_auth_data(
+        self.account_client.auth_provider.set_alt_auth_data(
             request_part='headers',
             auth_data=self.reselleradmin_auth_data
         )
         # Set a quota of 20 bytes on the user's account before each test
         headers = {"X-Account-Meta-Quota-Bytes": "20"}
 
-        self.os.custom_account_client.request("POST", url="", headers=headers,
-                                              body="")
+        self.os.account_client.request("POST", url="", headers=headers,
+                                       body="")
 
     def tearDown(self):
-        # Set the reselleradmin auth in headers for next custom_account_client
+        # Set the reselleradmin auth in headers for next account_client
         # request
-        self.custom_account_client.auth_provider.set_alt_auth_data(
+        self.account_client.auth_provider.set_alt_auth_data(
             request_part='headers',
             auth_data=self.reselleradmin_auth_data
         )
         # remove the quota from the container
         headers = {"X-Remove-Account-Meta-Quota-Bytes": "x"}
 
-        self.os.custom_account_client.request("POST", url="", headers=headers,
-                                              body="")
+        self.os.account_client.request("POST", url="", headers=headers,
+                                       body="")
         super(AccountQuotasTest, self).tearDown()
 
     @classmethod
-    def tearDownClass(cls):
+    def resource_cleanup(cls):
         if hasattr(cls, "container_name"):
             cls.delete_containers([cls.container_name])
-        cls.data.teardown_all()
-        super(AccountQuotasTest, cls).tearDownClass()
+        super(AccountQuotasTest, cls).resource_cleanup()
 
     @test.attr(type="smoke")
     @test.requires_ext(extension='account_quotas', service='object')
@@ -108,7 +83,6 @@ class AccountQuotasTest(base.BaseObjectTest):
         resp, _ = self.object_client.create_object(self.container_name,
                                                    object_name, data)
 
-        self.assertEqual(resp["status"], "201")
         self.assertHeaders(resp, 'Object', 'PUT')
 
     @test.attr(type=["smoke"])
@@ -117,7 +91,7 @@ class AccountQuotasTest(base.BaseObjectTest):
         """Test that the ResellerAdmin is able to modify and remove the quota
         on a user's account.
 
-        Using the custom_account client, the test modifies the quota
+        Using the account client, the test modifies the quota
         successively to:
 
         * "25": a random value different from the initial quota value.
@@ -126,15 +100,15 @@ class AccountQuotasTest(base.BaseObjectTest):
         """
         for quota in ("25", "", "20"):
 
-            self.custom_account_client.auth_provider.set_alt_auth_data(
+            self.account_client.auth_provider.set_alt_auth_data(
                 request_part='headers',
                 auth_data=self.reselleradmin_auth_data
             )
             headers = {"X-Account-Meta-Quota-Bytes": quota}
 
-            resp, _ = self.os.custom_account_client.request("POST", url="",
-                                                            headers=headers,
-                                                            body="")
+            resp, _ = self.os.account_client.request("POST", url="",
+                                                     headers=headers,
+                                                     body="")
 
             self.assertEqual(resp["status"], "204")
             self.assertHeaders(resp, 'Account', 'POST')

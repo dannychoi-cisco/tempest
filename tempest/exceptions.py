@@ -51,10 +51,6 @@ class RestClientException(TempestException,
     pass
 
 
-class RFCViolation(RestClientException):
-    message = "RFC Violation"
-
-
 class InvalidConfiguration(TempestException):
     message = "Invalid Configuration"
 
@@ -63,19 +59,7 @@ class InvalidCredentials(TempestException):
     message = "Invalid Credentials"
 
 
-class InvalidHttpSuccessCode(RestClientException):
-    message = "The success code is different than the expected one"
-
-
-class NotFound(RestClientException):
-    message = "Object not found"
-
-
-class Unauthorized(RestClientException):
-    message = 'Unauthorized'
-
-
-class InvalidServiceTag(RestClientException):
+class InvalidServiceTag(TempestException):
     message = "Invalid service tag"
 
 
@@ -123,15 +107,7 @@ class StackResourceBuildErrorException(TempestException):
                "'%(resource_status_reason)s'")
 
 
-class BadRequest(RestClientException):
-    message = "Bad request"
-
-
-class UnprocessableEntity(RestClientException):
-    message = "Unprocessable entity"
-
-
-class AuthenticationFailure(RestClientException):
+class AuthenticationFailure(TempestException):
     message = ("Authentication with user %(user)s and password "
                "%(password)s failed auth using tenant %(tenant)s.")
 
@@ -140,28 +116,12 @@ class EndpointNotFound(TempestException):
     message = "Endpoint not found"
 
 
-class RateLimitExceeded(TempestException):
-    message = "Rate limit exceeded"
-
-
-class OverLimit(TempestException):
-    message = "Quota exceeded"
-
-
-class ServerFault(TempestException):
-    message = "Got server fault"
-
-
 class ImageFault(TempestException):
     message = "Got image fault"
 
 
 class IdentityError(TempestException):
     message = "Got identity error"
-
-
-class Conflict(RestClientException):
-    message = "An object with that identifier already exists"
 
 
 class SSHTimeout(TempestException):
@@ -183,6 +143,34 @@ class TearDownException(TempestException):
     message = "%(num)d cleanUp operation failed"
 
 
+class RFCViolation(RestClientException):
+    message = "RFC Violation"
+
+
+class InvalidHttpSuccessCode(RestClientException):
+    message = "The success code is different than the expected one"
+
+
+class NotFound(RestClientException):
+    message = "Object not found"
+
+
+class Unauthorized(RestClientException):
+    message = 'Unauthorized'
+
+
+class BadRequest(RestClientException):
+    message = "Bad request"
+
+
+class OverLimit(RestClientException):
+    message = "Quota exceeded"
+
+
+class Conflict(RestClientException):
+    message = "An object with that identifier already exists"
+
+
 class ResponseWithNonEmptyBody(RFCViolation):
     message = ("RFC Violation! Response with %(status)d HTTP Status Code "
                "MUST NOT have a body")
@@ -193,21 +181,26 @@ class ResponseWithEntity(RFCViolation):
                "MUST NOT have an entity")
 
 
-class InvalidHTTPResponseBody(RestClientException):
-    message = "HTTP response body is invalid json or xml"
-
-
 class InvalidHTTPResponseHeader(RestClientException):
     message = "HTTP response header is invalid"
 
 
-class InvalidContentType(RestClientException):
-    message = "Invalid content type provided"
-
-
-class UnexpectedResponseCode(RestClientException):
-    message = "Unexpected response code received"
-
-
 class InvalidStructure(TempestException):
     message = "Invalid structure of table with details"
+
+
+class CommandFailed(Exception):
+    def __init__(self, returncode, cmd, output, stderr):
+        super(CommandFailed, self).__init__()
+        self.returncode = returncode
+        self.cmd = cmd
+        self.stdout = output
+        self.stderr = stderr
+
+    def __str__(self):
+        return ("Command '%s' returned non-zero exit status %d.\n"
+                "stdout:\n%s\n"
+                "stderr:\n%s" % (self.cmd,
+                                 self.returncode,
+                                 self.stdout,
+                                 self.stderr))

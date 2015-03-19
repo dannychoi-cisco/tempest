@@ -23,8 +23,8 @@ CONF = config.CONF
 class ListImagesTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(ListImagesTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(ListImagesTestJSON, cls).resource_setup()
         if not CONF.service_available.glance:
             skip_msg = ("%s skipped as glance is not available" % cls.__name__)
             raise cls.skipException(skip_msg)
@@ -33,23 +33,19 @@ class ListImagesTestJSON(base.BaseV2ComputeTest):
     @test.attr(type='smoke')
     def test_get_image(self):
         # Returns the correct details for a single image
-        resp, image = self.client.get_image(self.image_ref)
+        image = self.client.get_image(self.image_ref)
         self.assertEqual(self.image_ref, image['id'])
 
     @test.attr(type='smoke')
     def test_list_images(self):
         # The list of all images should contain the image
-        resp, images = self.client.list_images()
+        images = self.client.list_images()
         found = any([i for i in images if i['id'] == self.image_ref])
         self.assertTrue(found)
 
     @test.attr(type='smoke')
     def test_list_images_with_detail(self):
         # Detailed list of all images should contain the expected images
-        resp, images = self.client.list_images_with_detail()
+        images = self.client.list_images_with_detail()
         found = any([i for i in images if i['id'] == self.image_ref])
         self.assertTrue(found)
-
-
-class ListImagesTestXML(ListImagesTestJSON):
-    _interface = 'xml'

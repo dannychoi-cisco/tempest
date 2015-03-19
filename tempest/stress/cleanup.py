@@ -37,7 +37,7 @@ def cleanup():
         except Exception:
             pass
 
-    _, keypairs = admin_manager.keypairs_client.list_keypairs()
+    keypairs = admin_manager.keypairs_client.list_keypairs()
     LOG.info("Cleanup::remove %s keypairs" % len(keypairs))
     for k in keypairs:
         try:
@@ -46,7 +46,7 @@ def cleanup():
             pass
 
     secgrp_client = admin_manager.security_groups_client
-    _, secgrp = secgrp_client.list_security_groups({"all_tenants": True})
+    secgrp = secgrp_client.list_security_groups({"all_tenants": True})
     secgrp_del = [grp for grp in secgrp if grp['name'] != 'default']
     LOG.info("Cleanup::remove %s Security Group" % len(secgrp_del))
     for g in secgrp_del:
@@ -63,13 +63,13 @@ def cleanup():
         except Exception:
             pass
 
-    _, users = admin_manager.identity_client.get_users()
+    users = admin_manager.identity_client.get_users()
     LOG.info("Cleanup::remove %s users" % len(users))
     for user in users:
         if user['name'].startswith("stress_user"):
             admin_manager.identity_client.delete_user(user['id'])
 
-    _, tenants = admin_manager.identity_client.list_tenants()
+    tenants = admin_manager.identity_client.list_tenants()
     LOG.info("Cleanup::remove %s tenants" % len(tenants))
     for tenant in tenants:
         if tenant['name'].startswith("stress_tenant"):
@@ -95,7 +95,7 @@ def cleanup():
         except Exception:
             pass
 
-    _, vols = admin_manager.volumes_client.list_volumes({"all_tenants": True})
+    vols = admin_manager.volumes_client.list_volumes({"all_tenants": True})
     LOG.info("Cleanup::remove %s volumes" % len(vols))
     for v in vols:
         try:

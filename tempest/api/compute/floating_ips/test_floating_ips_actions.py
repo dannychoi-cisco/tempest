@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest_lib import exceptions as lib_exc
+
 from tempest.api.compute.floating_ips import base
 from tempest.common.utils import data_utils
 from tempest import exceptions
@@ -24,9 +26,8 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
     floating_ip = None
 
     @classmethod
-    @test.safe_setup
-    def setUpClass(cls):
-        super(FloatingIPsTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(FloatingIPsTestJSON, cls).resource_setup()
         cls.client = cls.floating_ips_client
         cls.floating_ip_id = None
 
@@ -39,11 +40,11 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
         cls.floating_ip = body['ip']
 
     @classmethod
-    def tearDownClass(cls):
+    def resource_cleanup(cls):
         # Deleting the floating IP which is created in this method
         if cls.floating_ip_id:
             resp, body = cls.client.delete_floating_ip(cls.floating_ip_id)
-        super(FloatingIPsTestJSON, cls).tearDownClass()
+        super(FloatingIPsTestJSON, cls).resource_cleanup()
 
     def _try_delete_floating_ip(self, floating_ip_id):
         # delete floating ip, if it exists
@@ -54,6 +55,7 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
             pass
 
     @test.attr(type='gate')
+    @test.services('network')
     def test_allocate_floating_ip(self):
         # Positive test:Allocation of a new floating IP to a project
         # should be successful
@@ -69,6 +71,7 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
         self.assertIn(floating_ip_details, body)
 
     @test.attr(type='gate')
+    @test.services('network')
     def test_delete_floating_ip(self):
         # Positive test:Deletion of valid floating IP from project
         # should be successful
@@ -85,6 +88,7 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
         self.client.wait_for_resource_deletion(floating_ip_body['id'])
 
     @test.attr(type='gate')
+    @test.services('network')
     def test_associate_disassociate_floating_ip(self):
         # Positive test:Associate and disassociate the provided floating IP
         # to a specific server should be successful
@@ -94,6 +98,11 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
             self.floating_ip,
             self.server_id)
         self.assertEqual(202, resp.status)
+
+        # Check instance_id in the floating_ip body
+        resp, body = self.client.get_floating_ip_details(self.floating_ip_id)
+        self.assertEqual(self.server_id, body['instance_id'])
+
         # Disassociation of floating IP that was associated in this method
         resp, body = self.client.disassociate_floating_ip_from_server(
             self.floating_ip,
@@ -101,6 +110,7 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
         self.assertEqual(202, resp.status)
 
     @test.attr(type='gate')
+    @test.services('network')
     def test_associate_already_associated_floating_ip(self):
         # positive test:Association of an already associated floating IP
         # to specific server should change the association of the Floating IP
@@ -127,10 +137,7 @@ class FloatingIPsTestJSON(base.BaseFloatingIPsTest):
 
         # Make sure no longer associated with old server
         self.assertRaises((exceptions.NotFound,
-                           exceptions.UnprocessableEntity),
+                           lib_exc.UnprocessableEntity,
+                           exceptions.Conflict),
                           self.client.disassociate_floating_ip_from_server,
                           self.floating_ip, self.server_id)
-
-
-class FloatingIPsTestXML(FloatingIPsTestJSON):
-    _interface = 'xml'

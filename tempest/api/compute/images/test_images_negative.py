@@ -24,11 +24,17 @@ CONF = config.CONF
 class ImagesNegativeTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(ImagesNegativeTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(ImagesNegativeTestJSON, cls).resource_setup()
         if not CONF.service_available.glance:
             skip_msg = ("%s skipped as glance is not available" % cls.__name__)
             raise cls.skipException(skip_msg)
+
+        if not CONF.compute_feature_enabled.snapshot:
+            skip_msg = ("%s skipped as instance snapshotting is not supported"
+                        % cls.__name__)
+            raise cls.skipException(skip_msg)
+
         cls.client = cls.images_client
         cls.servers_client = cls.servers_client
 
@@ -66,10 +72,10 @@ class ImagesNegativeTestJSON(base.BaseV2ComputeTest):
                                                    'SHUTOFF')
         self.addCleanup(self.servers_client.delete_server, server['id'])
         snapshot_name = data_utils.rand_name('test-snap-')
-        resp, image = self.create_image_from_server(server['id'],
-                                                    name=snapshot_name,
-                                                    wait_until='ACTIVE',
-                                                    wait_for_server=False)
+        image = self.create_image_from_server(server['id'],
+                                              name=snapshot_name,
+                                              wait_until='ACTIVE',
+                                              wait_for_server=False)
         self.addCleanup(self.client.delete_image, image['id'])
         self.assertEqual(snapshot_name, image['name'])
 
@@ -125,7 +131,3 @@ class ImagesNegativeTestJSON(base.BaseV2ComputeTest):
         # Return an error while trying to delete image with id over limit
         self.assertRaises(exceptions.NotFound, self.client.delete_image,
                           '11a22b9-12a9-5555-cc11-00ab112223fa-3fac')
-
-
-class ImagesNegativeTestXML(ImagesNegativeTestJSON):
-    _interface = 'xml'

@@ -19,15 +19,23 @@ import datetime
 from oslotest import mockpatch
 
 from tempest import auth
-from tempest.common import http
 from tempest import config
 from tempest import exceptions
+from tempest.services.identity.json import token_client as v2_client
+from tempest.services.identity.v3.json import token_client as v3_client
 from tempest.tests import base
-from tempest.tests import fake_auth_provider
 from tempest.tests import fake_config
 from tempest.tests import fake_credentials
 from tempest.tests import fake_http
 from tempest.tests import fake_identity
+
+
+def fake_get_default_credentials(credential_type, fill_in=True):
+    return fake_credentials.FakeCredentials()
+
+
+def fake_get_credentials(credential_type=None, fill_in=True, **kwargs):
+    return fake_credentials.FakeCredentials()
 
 
 class BaseAuthTestsSetUp(base.TestCase):
@@ -45,11 +53,9 @@ class BaseAuthTestsSetUp(base.TestCase):
         self.useFixture(fake_config.ConfigFixture())
         self.stubs.Set(config, 'TempestConfigPrivate', fake_config.FakePrivate)
         self.fake_http = fake_http.fake_httplib2(return_type=200)
-        self.stubs.Set(http.ClosingHttp, 'request', self.fake_http.request)
-        self.stubs.Set(auth, 'get_credentials',
-                       fake_auth_provider.get_credentials)
+        self.stubs.Set(auth, 'get_credentials', fake_get_credentials)
         self.stubs.Set(auth, 'get_default_credentials',
-                       fake_auth_provider.get_default_credentials)
+                       fake_get_default_credentials)
         self.auth_provider = self._auth(self.credentials)
 
 
@@ -59,12 +65,24 @@ class TestBaseAuthProvider(BaseAuthTestsSetUp):
     obviously don't test not implemented method or the ones which strongly
     depends on them.
     """
-    _auth_provider_class = auth.AuthProvider
 
-    def test_check_credentials_class(self):
-        self.assertRaises(NotImplementedError,
-                          self.auth_provider.check_credentials,
-                          auth.Credentials())
+    class FakeAuthProviderImpl(auth.AuthProvider):
+        def _decorate_request():
+            pass
+
+        def _fill_credentials():
+            pass
+
+        def _get_auth():
+            pass
+
+        def base_url():
+            pass
+
+        def is_expired():
+            pass
+
+    _auth_provider_class = FakeAuthProviderImpl
 
     def test_check_credentials_bad_type(self):
         self.assertFalse(self.auth_provider.check_credentials([]))
@@ -73,16 +91,6 @@ class TestBaseAuthProvider(BaseAuthTestsSetUp):
         # Dict credentials are only supported for backward compatibility
         auth_provider = self._auth(credentials={})
         self.assertIsInstance(auth_provider.credentials, auth.Credentials)
-
-    def test_instantiate_with_bad_credentials_type(self):
-        """
-        Assure that credentials with bad type fail with TypeError
-        """
-        self.assertRaises(TypeError, self._auth, [])
-
-    def test_auth_data_property(self):
-        self.assertRaises(NotImplementedError, getattr, self.auth_provider,
-                          'auth_data')
 
     def test_auth_data_property_when_cache_exists(self):
         self.auth_provider.cache = 'foo'
@@ -110,9 +118,10 @@ class TestBaseAuthProvider(BaseAuthTestsSetUp):
         self.assertIsNone(self.auth_provider.alt_part)
         self.assertIsNone(self.auth_provider.alt_auth_data)
 
-    def test_fill_credentials(self):
-        self.assertRaises(NotImplementedError,
-                          self.auth_provider.fill_credentials)
+    def test_auth_class(self):
+        self.assertRaises(TypeError,
+                          auth.AuthProvider,
+                          fake_credentials.FakeCredentials)
 
 
 class TestKeystoneV2AuthProvider(BaseAuthTestsSetUp):
@@ -122,7 +131,7 @@ class TestKeystoneV2AuthProvider(BaseAuthTestsSetUp):
 
     def setUp(self):
         super(TestKeystoneV2AuthProvider, self).setUp()
-        self.stubs.Set(http.ClosingHttp, 'request',
+        self.stubs.Set(v2_client.TokenClientJSON, 'raw_request',
                        fake_identity._fake_v2_response)
         self.target_url = 'test_api'
 
@@ -343,7 +352,7 @@ class TestKeystoneV3AuthProvider(TestKeystoneV2AuthProvider):
 
     def setUp(self):
         super(TestKeystoneV3AuthProvider, self).setUp()
-        self.stubs.Set(http.ClosingHttp, 'request',
+        self.stubs.Set(v3_client.V3TokenClientJSON, 'raw_request',
                        fake_identity._fake_v3_response)
 
     def _get_fake_alt_identity(self):

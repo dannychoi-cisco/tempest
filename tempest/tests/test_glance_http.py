@@ -15,9 +15,11 @@
 
 import httplib
 import json
+import socket
+
 import mock
 import six
-import socket
+from tempest_lib import exceptions as lib_exc
 
 from tempest.common import glance_http
 from tempest import exceptions
@@ -41,33 +43,33 @@ class TestGlanceHTTPClient(base.TestCase):
 
         self.fake_auth.base_url = mock.MagicMock(return_value=self.endpoint)
 
-        self.useFixture(mockpatch.PatchObject(httplib.HTTPConnection,
-                        'request',
-                        side_effect=self.fake_http.request(self.endpoint)[1]))
+        self.useFixture(mockpatch.PatchObject(
+            httplib.HTTPConnection,
+            'request',
+            side_effect=self.fake_http.request(self.endpoint)[1]))
         self.client = glance_http.HTTPClient(self.fake_auth, {})
 
     def _set_response_fixture(self, header, status, resp_body):
         resp = fake_http.fake_httplib(header, status=status,
                                       body=six.StringIO(resp_body))
         self.useFixture(mockpatch.PatchObject(httplib.HTTPConnection,
-                        'getresponse',
-                        return_value=resp))
+                        'getresponse', return_value=resp))
         return resp
 
     def test_json_request_without_content_type_header_in_response(self):
         self._set_response_fixture({}, 200, 'fake_response_body')
-        self.assertRaises(exceptions.InvalidContentType,
+        self.assertRaises(lib_exc.InvalidContentType,
                           self.client.json_request, 'GET', '/images')
 
     def test_json_request_with_xml_content_type_header_in_request(self):
-        self.assertRaises(exceptions.InvalidContentType,
+        self.assertRaises(lib_exc.InvalidContentType,
                           self.client.json_request, 'GET', '/images',
                           headers={'Content-Type': 'application/xml'})
 
     def test_json_request_with_xml_content_type_header_in_response(self):
         self._set_response_fixture({'content-type': 'application/xml'},
                                    200, 'fake_response_body')
-        self.assertRaises(exceptions.InvalidContentType,
+        self.assertRaises(lib_exc.InvalidContentType,
                           self.client.json_request, 'GET', '/images')
 
     def test_json_request_with_json_content_type_header_only_in_resp(self):
@@ -170,7 +172,7 @@ class TestGlanceHTTPClient(base.TestCase):
 
     def test_get_connection_kwargs_set_timeout_for_http(self):
         kwargs = self.client.get_connection_kwargs('http', timeout=10,
-                                                   cacert='foo')
+                                                   ca_certs='foo')
         self.assertEqual(10, kwargs['timeout'])
         # nothing more than timeout is evaluated for http connections
         self.assertEqual(1, len(kwargs.keys()))
@@ -178,7 +180,7 @@ class TestGlanceHTTPClient(base.TestCase):
     def test_get_connection_kwargs_default_for_https(self):
         kwargs = self.client.get_connection_kwargs('https')
         self.assertEqual(600, kwargs['timeout'])
-        self.assertEqual(None, kwargs['cacert'])
+        self.assertEqual(None, kwargs['ca_certs'])
         self.assertEqual(None, kwargs['cert_file'])
         self.assertEqual(None, kwargs['key_file'])
         self.assertEqual(False, kwargs['insecure'])
@@ -187,13 +189,13 @@ class TestGlanceHTTPClient(base.TestCase):
 
     def test_get_connection_kwargs_set_params_for_https(self):
         kwargs = self.client.get_connection_kwargs('https', timeout=10,
-                                                   cacert='foo',
+                                                   ca_certs='foo',
                                                    cert_file='/foo/bar.cert',
                                                    key_file='/foo/key.pem',
                                                    insecure=True,
                                                    ssl_compression=False)
         self.assertEqual(10, kwargs['timeout'])
-        self.assertEqual('foo', kwargs['cacert'])
+        self.assertEqual('foo', kwargs['ca_certs'])
         self.assertEqual('/foo/bar.cert', kwargs['cert_file'])
         self.assertEqual('/foo/key.pem', kwargs['key_file'])
         self.assertEqual(True, kwargs['insecure'])

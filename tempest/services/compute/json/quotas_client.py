@@ -15,18 +15,13 @@
 
 import json
 
-from tempest.api_schema.compute.v2 import quotas as schema
-from tempest.common import rest_client
-from tempest import config
+from tempest.api_schema.response.compute.v2\
+    import quota_classes as classes_schema
+from tempest.api_schema.response.compute.v2 import quotas as schema
+from tempest.common import service_client
 
-CONF = config.CONF
 
-
-class QuotasClientJSON(rest_client.RestClient):
-
-    def __init__(self, auth_provider):
-        super(QuotasClientJSON, self).__init__(auth_provider)
-        self.service = CONF.compute.catalog_type
+class QuotasClientJSON(service_client.ServiceClient):
 
     def get_quota_set(self, tenant_id, user_id=None):
         """List the quota set for a tenant."""
@@ -37,7 +32,7 @@ class QuotasClientJSON(rest_client.RestClient):
         resp, body = self.get(url)
         body = json.loads(body)
         self.validate_response(schema.quota_set, resp, body)
-        return resp, body['quota_set']
+        return service_client.ResponseBody(resp, body['quota_set'])
 
     def get_default_quota_set(self, tenant_id):
         """List the default quota set for a tenant."""
@@ -46,7 +41,7 @@ class QuotasClientJSON(rest_client.RestClient):
         resp, body = self.get(url)
         body = json.loads(body)
         self.validate_response(schema.quota_set, resp, body)
-        return resp, body['quota_set']
+        return service_client.ResponseBody(resp, body['quota_set'])
 
     def update_quota_set(self, tenant_id, user_id=None,
                          force=None, injected_file_content_bytes=None,
@@ -111,10 +106,35 @@ class QuotasClientJSON(rest_client.RestClient):
 
         body = json.loads(body)
         self.validate_response(schema.quota_set_update, resp, body)
-        return resp, body['quota_set']
+        return service_client.ResponseBody(resp, body['quota_set'])
 
     def delete_quota_set(self, tenant_id):
         """Delete the tenant's quota set."""
         resp, body = self.delete('os-quota-sets/%s' % str(tenant_id))
         self.validate_response(schema.delete_quota, resp, body)
-        return resp, body
+        return service_client.ResponseBody(resp, body)
+
+
+class QuotaClassesClientJSON(service_client.ServiceClient):
+
+    def get_quota_class_set(self, quota_class_id):
+        """List the quota class set for a quota class."""
+
+        url = 'os-quota-class-sets/%s' % str(quota_class_id)
+        resp, body = self.get(url)
+        body = json.loads(body)
+        self.validate_response(classes_schema.quota_set, resp, body)
+        return service_client.ResponseBody(resp, body['quota_class_set'])
+
+    def update_quota_class_set(self, quota_class_id, **kwargs):
+        """
+        Updates the quota class's limits for one or more resources.
+        """
+        post_body = json.dumps({'quota_class_set': kwargs})
+
+        resp, body = self.put('os-quota-class-sets/%s' % str(quota_class_id),
+                              post_body)
+
+        body = json.loads(body)
+        self.validate_response(classes_schema.quota_set_update, resp, body)
+        return service_client.ResponseBody(resp, body['quota_class_set'])

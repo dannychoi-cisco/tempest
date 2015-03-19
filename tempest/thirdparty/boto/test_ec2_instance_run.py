@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from boto import exception
-
 from tempest.common.utils import data_utils
 from tempest.common.utils.linux import remote_client
 from tempest import config
@@ -32,8 +30,8 @@ LOG = logging.getLogger(__name__)
 class InstanceRunTest(boto_test.BotoTestCase):
 
     @classmethod
-    def setUpClass(cls):
-        super(InstanceRunTest, cls).setUpClass()
+    def resource_setup(cls):
+        super(InstanceRunTest, cls).resource_setup()
         if not cls.conclusion['A_I_IMAGES_READY']:
             raise cls.skipException("".join(("EC2 ", cls.__name__,
                                     ": requires ami/aki/ari manifest")))
@@ -82,6 +80,13 @@ class InstanceRunTest(boto_test.BotoTestCase):
                 raise exceptions.EC2RegisterImageException(
                     image_id=image["image_id"])
 
+    def _terminate_reservation(self, reservation, rcuk):
+        for instance in reservation.instances:
+            instance.terminate()
+        for instance in reservation.instances:
+            self.assertInstanceStateWait(instance, '_GONE')
+        self.cancelResourceCleanUp(rcuk)
+
     def test_run_idempotent_instances(self):
         # EC2 run instances idempotently
 
@@ -95,11 +100,6 @@ class InstanceRunTest(boto_test.BotoTestCase):
             rcuk = self.addResourceCleanUp(self.destroy_reservation,
                                            reservation)
             return (reservation, rcuk)
-
-        def _terminate_reservation(reservation, rcuk):
-            for instance in reservation.instances:
-                instance.terminate()
-            self.cancelResourceCleanUp(rcuk)
 
         reservation_1, rcuk_1 = _run_instance('token_1')
         reservation_2, rcuk_2 = _run_instance('token_2')
@@ -116,8 +116,8 @@ class InstanceRunTest(boto_test.BotoTestCase):
         # handled by rcuk1
         self.cancelResourceCleanUp(rcuk_1a)
 
-        _terminate_reservation(reservation_1, rcuk_1)
-        _terminate_reservation(reservation_2, rcuk_2)
+        self._terminate_reservation(reservation_1, rcuk_1)
+        self._terminate_reservation(reservation_2, rcuk_2)
 
     def test_run_stop_terminate_instance(self):
         # EC2 run, stop and terminate instance
@@ -139,9 +139,7 @@ class InstanceRunTest(boto_test.BotoTestCase):
             if instance.state != "stopped":
                 self.assertInstanceStateWait(instance, "stopped")
 
-        for instance in reservation.instances:
-            instance.terminate()
-        self.cancelResourceCleanUp(rcuk)
+        self._terminate_reservation(reservation, rcuk)
 
     def test_run_stop_terminate_instance_with_tags(self):
         # EC2 run, stop and terminate instance with tags
@@ -159,25 +157,33 @@ class InstanceRunTest(boto_test.BotoTestCase):
             instance.add_tag('key1', value='value1')
 
         tags = self.ec2_client.get_all_tags()
-        self.assertEqual(tags[0].name, 'key1')
-        self.assertEqual(tags[0].value, 'value1')
+        td = {item.name: item.value for item in tags}
+
+        self.assertIn('key1', td)
+        self.assertEqual('value1', td['key1'])
 
         tags = self.ec2_client.get_all_tags(filters={'key': 'key1'})
-        self.assertEqual(tags[0].name, 'key1')
-        self.assertEqual(tags[0].value, 'value1')
+        td = {item.name: item.value for item in tags}
+        self.assertIn('key1', td)
+        self.assertEqual('value1', td['key1'])
 
         tags = self.ec2_client.get_all_tags(filters={'value': 'value1'})
-        self.assertEqual(tags[0].name, 'key1')
-        self.assertEqual(tags[0].value, 'value1')
+        td = {item.name: item.value for item in tags}
+        self.assertIn('key1', td)
+        self.assertEqual('value1', td['key1'])
 
         tags = self.ec2_client.get_all_tags(filters={'key': 'value2'})
-        self.assertEqual(len(tags), 0, str(tags))
+        td = {item.name: item.value for item in tags}
+        self.assertNotIn('key1', td)
 
         for instance in reservation.instances:
             instance.remove_tag('key1', value='value1')
 
         tags = self.ec2_client.get_all_tags()
-        self.assertEqual(len(tags), 0, str(tags))
+
+        # NOTE: Volume-attach and detach causes metadata (tags) to be created
+        # for the volume. So exclude them while asserting.
+        self.assertNotIn('key1', tags)
 
         for instance in reservation.instances:
             instance.stop()
@@ -185,9 +191,7 @@ class InstanceRunTest(boto_test.BotoTestCase):
             if instance.state != "stopped":
                 self.assertInstanceStateWait(instance, "stopped")
 
-        for instance in reservation.instances:
-            instance.terminate()
-        self.cancelResourceCleanUp(rcuk)
+        self._terminate_reservation(reservation, rcuk)
 
     def test_run_terminate_instance(self):
         # EC2 run, terminate immediately
@@ -199,18 +203,30 @@ class InstanceRunTest(boto_test.BotoTestCase):
 
         for instance in reservation.instances:
             instance.terminate()
-        try:
-            instance.update(validate=True)
-        except ValueError:
-            pass
-        except exception.EC2ResponseError as exc:
-            if self.ec2_error_code.\
-                client.InvalidInstanceID.NotFound.match(exc) is None:
-                pass
-            else:
-                raise
-        else:
-            self.assertNotEqual(instance.state, "running")
+        self.assertInstanceStateWait(instance, '_GONE')
+
+    def test_run_reboot_terminate_instance(self):
+        # EC2 run, await till it reaches to running state, then reboot,
+        # and wait untill its state is running, and then terminate
+        image_ami = self.ec2_client.get_image(self.images["ami"]
+                                              ["image_id"])
+        reservation = image_ami.run(kernel_id=self.images["aki"]["image_id"],
+                                    ramdisk_id=self.images["ari"]["image_id"],
+                                    instance_type=self.instance_type)
+
+        self.assertEqual(1, len(reservation.instances))
+
+        instance = reservation.instances[0]
+        if instance.state != "running":
+            self.assertInstanceStateWait(instance, "running")
+
+        instance.reboot()
+        if instance.state != "running":
+            self.assertInstanceStateWait(instance, "running")
+        LOG.debug("Instance rebooted - state: %s", instance.state)
+
+        instance.terminate()
+        self.assertInstanceStateWait(instance, '_GONE')
 
     def test_compute_with_volumes(self):
         # EC2 1. integration test (not strict)
@@ -318,8 +334,7 @@ class InstanceRunTest(boto_test.BotoTestCase):
 
         volume.detach()
 
-        self.assertVolumeStatusWait(_volume_state, "available")
-        wait.re_search_wait(_volume_state, "available")
+        self.assertVolumeStatusWait(volume, "available")
 
         wait.state_wait(_part_state, 'DECREASE')
 

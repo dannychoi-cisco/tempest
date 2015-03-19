@@ -27,8 +27,8 @@ class LiveBlockMigrationTestJSON(base.BaseV2ComputeAdminTest):
     _host_key = 'OS-EXT-SRV-ATTR:host'
 
     @classmethod
-    def setUpClass(cls):
-        super(LiveBlockMigrationTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(LiveBlockMigrationTestJSON, cls).resource_setup()
 
         cls.admin_hosts_client = cls.os_adm.hosts_client
         cls.admin_servers_client = cls.os_adm.servers_client
@@ -36,7 +36,7 @@ class LiveBlockMigrationTestJSON(base.BaseV2ComputeAdminTest):
         cls.created_server_ids = []
 
     def _get_compute_hostnames(self):
-        _resp, body = self.admin_hosts_client.list_hosts()
+        body = self.admin_hosts_client.list_hosts()
         return [
             host_record['host_name']
             for host_record in body
@@ -77,7 +77,7 @@ class LiveBlockMigrationTestJSON(base.BaseV2ComputeAdminTest):
             return server_id
 
     def _volume_clean_up(self, server_id, volume_id):
-        resp, body = self.volumes_client.get_volume(volume_id)
+        body = self.volumes_client.get_volume(volume_id)
         if body['status'] == 'in-use':
             self.servers_client.detach_volume(server_id, volume_id)
             self.volumes_client.wait_for_volume_status(volume_id, 'available')
@@ -115,8 +115,7 @@ class LiveBlockMigrationTestJSON(base.BaseV2ComputeAdminTest):
         actual_host = self._get_host_for_server(server_id)
         target_host = self._get_host_other_than(actual_host)
 
-        resp, volume = self.volumes_client.create_volume(1,
-                                                         display_name='test')
+        volume = self.volumes_client.create_volume(1, display_name='test')
 
         self.volumes_client.wait_for_volume_status(volume['id'],
                                                    'available')
@@ -130,9 +129,3 @@ class LiveBlockMigrationTestJSON(base.BaseV2ComputeAdminTest):
         self._migrate_server_to(server_id, target_host)
         self.servers_client.wait_for_server_status(server_id, 'ACTIVE')
         self.assertEqual(target_host, self._get_host_for_server(server_id))
-
-
-class LiveBlockMigrationTestXML(LiveBlockMigrationTestJSON):
-    _host_key = (
-        '{http://docs.openstack.org/compute/ext/extended_status/api/v1.1}host')
-    _interface = 'xml'

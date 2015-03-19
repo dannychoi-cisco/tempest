@@ -18,13 +18,13 @@ import copy
 from oslo.config import cfg
 
 from tempest import auth
-from tempest.common import http
 from tempest.common import tempest_fixtures as fixtures
 from tempest import config
 from tempest import exceptions
+from tempest.services.identity.json import token_client as v2_client
+from tempest.services.identity.v3.json import token_client as v3_client
 from tempest.tests import base
 from tempest.tests import fake_config
-from tempest.tests import fake_http
 from tempest.tests import fake_identity
 
 
@@ -39,8 +39,6 @@ class CredentialsTests(base.TestCase):
 
     def setUp(self):
         super(CredentialsTests, self).setUp()
-        self.fake_http = fake_http.fake_httplib2(return_type=200)
-        self.stubs.Set(http.ClosingHttp, 'request', self.fake_http.request)
         self.useFixture(fake_config.ConfigFixture())
         self.stubs.Set(config, 'TempestConfigPrivate', fake_config.FakePrivate)
 
@@ -79,11 +77,12 @@ class KeystoneV2CredentialsTests(CredentialsTests):
 
     identity_response = fake_identity._fake_v2_response
     credentials_class = auth.KeystoneV2Credentials
+    tokenclient_class = v2_client.TokenClientJSON
 
     def setUp(self):
         super(KeystoneV2CredentialsTests, self).setUp()
-        self.stubs.Set(http.ClosingHttp, 'request', self.identity_response)
-        self.stubs.Set(config, 'TempestConfigPrivate', fake_config.FakePrivate)
+        self.stubs.Set(self.tokenclient_class, 'raw_request',
+                       self.identity_response)
 
     def _verify_credentials(self, credentials_class, filled=True,
                             creds_dict=None):
@@ -128,12 +127,22 @@ class KeystoneV2CredentialsTests(CredentialsTests):
         creds = self._get_credentials()
         self.assertTrue(creds.is_valid())
 
-    def test_is_not_valid(self):
+    def _test_is_not_valid(self, ignore_key):
         creds = self._get_credentials()
         for attr in self.attributes.keys():
+            if attr == ignore_key:
+                continue
+            temp_attr = getattr(creds, attr)
             delattr(creds, attr)
             self.assertFalse(creds.is_valid(),
                              "Credentials should be invalid without %s" % attr)
+            setattr(creds, attr, temp_attr)
+
+    def test_is_not_valid(self):
+        # NOTE(mtreinish): A KeystoneV2 credential object is valid without
+        # a tenant_name. So skip that check. See tempest.auth for the valid
+        # credential requirements
+        self._test_is_not_valid('tenant_name')
 
     def test_default(self):
         self.useFixture(fixtures.LockFixture('auth_version'))
@@ -179,6 +188,7 @@ class KeystoneV3CredentialsTests(KeystoneV2CredentialsTests):
 
     credentials_class = auth.KeystoneV3Credentials
     identity_response = fake_identity._fake_v3_response
+    tokenclient_class = v3_client.V3TokenClientJSON
 
     def setUp(self):
         super(KeystoneV3CredentialsTests, self).setUp()
@@ -188,9 +198,6 @@ class KeystoneV3CredentialsTests(KeystoneV2CredentialsTests):
         for prefix in ['', 'alt_', 'admin_']:
             cfg.CONF.set_default(prefix + 'domain_name', 'fake_domain_name',
                                  group='identity')
-        # Compute Admin group items
-        cfg.CONF.set_default('domain_name', 'fake_domain_name',
-                             group='compute-admin')
 
     def test_default(self):
         self.useFixture(fixtures.LockFixture('auth_version'))
@@ -204,6 +211,12 @@ class KeystoneV3CredentialsTests(KeystoneV2CredentialsTests):
                 else:
                     config_value = 'fake_' + attr
                 self.assertEqual(getattr(creds, attr), config_value)
+
+    def test_is_not_valid(self):
+        # NOTE(mtreinish) For a Keystone V3 credential object a project name
+        # is not required to be valid, so we skip that check. See tempest.auth
+        # for the valid credential requirements
+        self._test_is_not_valid('project_name')
 
     def test_synced_attributes(self):
         attributes = self.attributes

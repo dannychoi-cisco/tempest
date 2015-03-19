@@ -28,15 +28,14 @@ class HypervisorAdminNegativeTestJSON(base.BaseV2ComputeAdminTest):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super(HypervisorAdminNegativeTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(HypervisorAdminNegativeTestJSON, cls).resource_setup()
         cls.client = cls.os_adm.hypervisor_client
         cls.non_adm_client = cls.hypervisor_client
 
     def _list_hypervisors(self):
         # List of hypervisors
-        resp, hypers = self.client.get_hypervisor_list()
-        self.assertEqual(200, resp.status)
+        hypers = self.client.get_hypervisor_list()
         return hypers
 
     @test.attr(type=['negative', 'gate'])
@@ -134,7 +133,3 @@ class HypervisorAdminNegativeTestJSON(base.BaseV2ComputeAdminTest):
             exceptions.Unauthorized,
             self.non_adm_client.search_hypervisor,
             hypers[0]['hypervisor_hostname'])
-
-
-class HypervisorAdminNegativeTestXML(HypervisorAdminNegativeTestJSON):
-    _interface = 'xml'

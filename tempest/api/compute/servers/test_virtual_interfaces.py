@@ -14,6 +14,7 @@
 #    under the License.
 
 import netaddr
+from tempest_lib import decorators
 
 from tempest.api.compute import base
 from tempest import config
@@ -25,17 +26,18 @@ CONF = config.CONF
 class VirtualInterfacesTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
+    def resource_setup(cls):
         # This test needs a network and a subnet
         cls.set_network_resources(network=True, subnet=True)
-        super(VirtualInterfacesTestJSON, cls).setUpClass()
+        super(VirtualInterfacesTestJSON, cls).resource_setup()
         cls.client = cls.servers_client
         resp, server = cls.create_test_server(wait_until='ACTIVE')
         cls.server_id = server['id']
 
-    @test.skip_because(bug="1183436",
-                       condition=CONF.service_available.neutron)
+    @decorators.skip_because(bug="1183436",
+                             condition=CONF.service_available.neutron)
     @test.attr(type='gate')
+    @test.services('network')
     def test_list_virtual_interfaces(self):
         # Positive test:Should be able to GET the virtual interfaces list
         # for a given server_id
@@ -49,7 +51,3 @@ class VirtualInterfacesTestJSON(base.BaseV2ComputeTest):
             mac_address = virt_iface['mac_address']
             self.assertTrue(netaddr.valid_mac(mac_address),
                             "Invalid mac address detected.")
-
-
-class VirtualInterfacesTestXML(VirtualInterfacesTestJSON):
-    _interface = 'xml'

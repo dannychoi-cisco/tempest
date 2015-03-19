@@ -13,11 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from testtools import matchers
+
 from tempest.api.compute import base
 from tempest.common.utils import data_utils
 from tempest import config
 from tempest import test
-from testtools import matchers
+
 
 CONF = config.CONF
 
@@ -25,8 +27,8 @@ CONF = config.CONF
 class VolumesGetTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(VolumesGetTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(VolumesGetTestJSON, cls).resource_setup()
         cls.client = cls.volumes_extensions_client
         if not CONF.service_available.cinder:
             skip_msg = ("%s skipped as Cinder is not available" % cls.__name__)
@@ -39,11 +41,10 @@ class VolumesGetTestJSON(base.BaseV2ComputeTest):
         v_name = data_utils.rand_name('Volume-%s-') % self._interface
         metadata = {'Type': 'work'}
         # Create volume
-        resp, volume = self.client.create_volume(size=1,
-                                                 display_name=v_name,
-                                                 metadata=metadata)
+        volume = self.client.create_volume(size=1,
+                                           display_name=v_name,
+                                           metadata=metadata)
         self.addCleanup(self.delete_volume, volume['id'])
-        self.assertEqual(200, resp.status)
         self.assertIn('id', volume)
         self.assertIn('displayName', volume)
         self.assertEqual(volume['displayName'], v_name,
@@ -54,8 +55,7 @@ class VolumesGetTestJSON(base.BaseV2ComputeTest):
         # Wait for Volume status to become ACTIVE
         self.client.wait_for_volume_status(volume['id'], 'available')
         # GET Volume
-        resp, fetched_volume = self.client.get_volume(volume['id'])
-        self.assertEqual(200, resp.status)
+        fetched_volume = self.client.get_volume(volume['id'])
         # Verification of details of fetched Volume
         self.assertEqual(v_name,
                          fetched_volume['displayName'],
@@ -69,7 +69,3 @@ class VolumesGetTestJSON(base.BaseV2ComputeTest):
                         matchers.ContainsAll(metadata.items()),
                         'The fetched Volume metadata misses data '
                         'from the created Volume')
-
-
-class VolumesGetTestXML(VolumesGetTestJSON):
-    _interface = "xml"

@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest_lib import decorators
+import testtools
 import time
 import urlparse
 
@@ -34,9 +36,8 @@ class ContainerSyncTest(base.BaseObjectTest):
     clients = {}
 
     @classmethod
-    @test.safe_setup
-    def setUpClass(cls):
-        super(ContainerSyncTest, cls).setUpClass()
+    def resource_setup(cls):
+        super(ContainerSyncTest, cls).resource_setup()
         cls.containers = []
         cls.objects = []
 
@@ -44,10 +45,9 @@ class ContainerSyncTest(base.BaseObjectTest):
         cls.local_ip = '127.0.0.1'
 
         # Must be configure according to container-sync interval
-        container_sync_timeout = \
-            int(CONF.object_storage.container_sync_timeout)
+        container_sync_timeout = CONF.object_storage.container_sync_timeout
         cls.container_sync_interval = \
-            int(CONF.object_storage.container_sync_interval)
+            CONF.object_storage.container_sync_interval
         cls.attempts = \
             int(container_sync_timeout / cls.container_sync_interval)
 
@@ -61,14 +61,12 @@ class ContainerSyncTest(base.BaseObjectTest):
             cls.containers.append(cont_name)
 
     @classmethod
-    def tearDownClass(cls):
+    def resource_cleanup(cls):
         for client in cls.clients.values():
             cls.delete_containers(cls.containers, client[0], client[1])
-        super(ContainerSyncTest, cls).tearDownClass()
+        super(ContainerSyncTest, cls).resource_cleanup()
 
-    @test.attr(type='slow')
-    @test.skip_because(bug='1317133')
-    def test_container_synchronization(self):
+    def _test_container_synchronization(self, make_headers):
         # container to container synchronization
         # to allow/accept sync requests to/from other accounts
 
@@ -76,23 +74,13 @@ class ContainerSyncTest(base.BaseObjectTest):
         for cont in (self.containers, self.containers[::-1]):
             cont_client = [self.clients[c][0] for c in cont]
             obj_client = [self.clients[c][1] for c in cont]
-            # tell first container to synchronize to a second
-            client_proxy_ip = \
-                urlparse.urlparse(cont_client[1].base_url).netloc.split(':')[0]
-            client_base_url = \
-                cont_client[1].base_url.replace(client_proxy_ip,
-                                                self.local_ip)
-            headers = {'X-Container-Sync-Key': 'sync_key',
-                       'X-Container-Sync-To': "%s/%s" %
-                       (client_base_url, str(cont[1]))}
+            headers = make_headers(cont[1], cont_client[1])
             resp, body = \
                 cont_client[0].put(str(cont[0]), body=None, headers=headers)
-            self.assertIn(int(resp['status']), test.HTTP_SUCCESS)
             # create object in container
             object_name = data_utils.rand_name(name='TestSyncObject')
             data = object_name[::-1]  # data_utils.arbitrary_string()
             resp, _ = obj_client[0].create_object(cont[0], object_name, data)
-            self.assertIn(int(resp['status']), test.HTTP_SUCCESS)
             self.objects.append(object_name)
 
         # wait until container contents list is not empty
@@ -100,22 +88,19 @@ class ContainerSyncTest(base.BaseObjectTest):
         params = {'format': 'json'}
         while self.attempts > 0:
             object_lists = []
-            for client_index in (0, 1):
-                resp, object_list = \
-                    cont_client[client_index].\
-                    list_container_contents(self.containers[client_index],
-                                            params=params)
-                self.assertIn(int(resp['status']), test.HTTP_SUCCESS)
+            for c_client, cont in zip(cont_client, self.containers):
+                resp, object_list = c_client.list_container_contents(
+                    cont, params=params)
                 object_lists.append(dict(
                     (obj['name'], obj) for obj in object_list))
             # check that containers are not empty and have equal keys()
             # or wait for next attempt
-            if not object_lists[0] or not object_lists[1] or \
-                    set(object_lists[0].keys()) != set(object_lists[1].keys()):
+            if object_lists[0] and object_lists[1] and \
+                    set(object_lists[0].keys()) == set(object_lists[1].keys()):
+                break
+            else:
                 time.sleep(self.container_sync_interval)
                 self.attempts -= 1
-            else:
-                break
 
         self.assertEqual(object_lists[0], object_lists[1],
                          'Different object lists in containers.')
@@ -125,5 +110,23 @@ class ContainerSyncTest(base.BaseObjectTest):
         for obj_client, cont in obj_clients:
             for obj_name in object_lists[0]:
                 resp, object_content = obj_client.get_object(cont, obj_name)
-                self.assertIn(int(resp['status']), test.HTTP_SUCCESS)
                 self.assertEqual(object_content, obj_name[::-1])
+
+    @test.attr(type='slow')
+    @decorators.skip_because(bug='1317133')
+    @testtools.skipIf(
+        not CONF.object_storage_feature_enabled.container_sync,
+        'Old-style container sync function is disabled')
+    def test_container_synchronization(self):
+        def make_headers(cont, cont_client):
+            # tell first container to synchronize to a second
+            client_proxy_ip = \
+                urlparse.urlparse(cont_client.base_url).netloc.split(':')[0]
+            client_base_url = \
+                cont_client.base_url.replace(client_proxy_ip,
+                                             self.local_ip)
+            headers = {'X-Container-Sync-Key': 'sync_key',
+                       'X-Container-Sync-To': "%s/%s" %
+                       (client_base_url, str(cont))}
+            return headers
+        self._test_container_synchronization(make_headers)

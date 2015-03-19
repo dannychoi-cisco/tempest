@@ -21,8 +21,8 @@ from tempest import test
 class ServersTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(ServersTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(ServersTestJSON, cls).resource_setup()
         cls.client = cls.servers_client
 
     def tearDown(self):
@@ -62,8 +62,8 @@ class ServersTestJSON(base.BaseV2ComputeTest):
         # Specify a keypair while creating a server
 
         key_name = data_utils.rand_name('key')
-        resp, keypair = self.keypairs_client.create_keypair(key_name)
-        resp, body = self.keypairs_client.list_keypairs()
+        self.keypairs_client.create_keypair(key_name)
+        self.keypairs_client.list_keypairs()
         resp, server = self.create_test_server(key_name=key_name)
         self.assertEqual('202', resp['status'])
         self.client.wait_for_server_status(server['id'], 'ACTIVE')
@@ -124,7 +124,3 @@ class ServersTestJSON(base.BaseV2ComputeTest):
         self.client.wait_for_server_status(server['id'], 'ACTIVE')
         resp, server = self.client.get_server(server['id'])
         self.assertEqual('2001:2001::3', server['accessIPv6'])
-
-
-class ServersTestXML(ServersTestJSON):
-    _interface = 'xml'

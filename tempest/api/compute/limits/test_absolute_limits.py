@@ -20,14 +20,14 @@ from tempest import test
 class AbsoluteLimitsTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(AbsoluteLimitsTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(AbsoluteLimitsTestJSON, cls).resource_setup()
         cls.client = cls.limits_client
 
     @test.attr(type='gate')
     def test_absLimits_get(self):
         # To check if all limits are present in the response
-        resp, absolute_limits = self.client.get_absolute_limits()
+        absolute_limits = self.client.get_absolute_limits()
         expected_elements = ['maxImageMeta', 'maxPersonality',
                              'maxPersonalitySize',
                              'maxServerMeta', 'maxTotalCores',
@@ -43,7 +43,3 @@ class AbsoluteLimitsTestJSON(base.BaseV2ComputeTest):
         self.assertEqual(0, len(missing_elements),
                          "Failed to find element %s in absolute limits list"
                          % ', '.join(ele for ele in missing_elements))
-
-
-class AbsoluteLimitsTestXML(AbsoluteLimitsTestJSON):
-    _interface = 'xml'

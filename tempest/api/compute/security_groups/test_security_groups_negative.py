@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest_lib import decorators
 import testtools
 
 from tempest.api.compute.security_groups import base
@@ -27,14 +28,14 @@ CONF = config.CONF
 class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
 
     @classmethod
-    def setUpClass(cls):
-        super(SecurityGroupsNegativeTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(SecurityGroupsNegativeTestJSON, cls).resource_setup()
         cls.client = cls.security_groups_client
         cls.neutron_available = CONF.service_available.neutron
 
     def _generate_a_non_existent_security_group_id(self):
         security_group_id = []
-        resp, body = self.client.list_security_groups()
+        body = self.client.list_security_groups()
         for i in range(len(body)):
             security_group_id.append(body[i]['id'])
         # Generate a non-existent security group id
@@ -47,6 +48,7 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
         return non_exist_id
 
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_security_group_get_nonexistent_group(self):
         # Negative test:Should not be able to GET the details
         # of non-existent Security Group
@@ -54,9 +56,10 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
         self.assertRaises(exceptions.NotFound, self.client.get_security_group,
                           non_exist_id)
 
-    @test.skip_because(bug="1161411",
-                       condition=CONF.service_available.neutron)
+    @decorators.skip_because(bug="1161411",
+                             condition=CONF.service_available.neutron)
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_security_group_create_with_invalid_group_name(self):
         # Negative test: Security Group should not be created with group name
         # as an empty string/with white spaces/chars more than 255
@@ -74,9 +77,10 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
                           self.client.create_security_group, s_name,
                           s_description)
 
-    @test.skip_because(bug="1161411",
-                       condition=CONF.service_available.neutron)
+    @decorators.skip_because(bug="1161411",
+                             condition=CONF.service_available.neutron)
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_security_group_create_with_invalid_group_description(self):
         # Negative test:Security Group should not be created with description
         # as an empty string/with white spaces/chars more than 255
@@ -96,24 +100,24 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
     @testtools.skipIf(CONF.service_available.neutron,
                       "Neutron allows duplicate names for security groups")
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_security_group_create_with_duplicate_name(self):
         # Negative test:Security Group with duplicate name should not
         # be created
         s_name = data_utils.rand_name('securitygroup-')
         s_description = data_utils.rand_name('description-')
-        resp, security_group =\
-            self.create_security_group(s_name, s_description)
-        self.assertEqual(200, resp.status)
+        self.create_security_group(s_name, s_description)
         # Now try the Security Group with the same 'Name'
         self.assertRaises(exceptions.BadRequest,
                           self.client.create_security_group, s_name,
                           s_description)
 
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_delete_the_default_security_group(self):
         # Negative test:Deletion of the "default" Security Group should Fail
         default_security_group_id = None
-        resp, body = self.client.list_security_groups()
+        body = self.client.list_security_groups()
         for i in range(len(body)):
             if body[i]['name'] == 'default':
                 default_security_group_id = body[i]['id']
@@ -124,6 +128,7 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
                           default_security_group_id)
 
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_delete_nonexistent_security_group(self):
         # Negative test:Deletion of a non-existent Security Group should fail
         non_exist_id = self._generate_a_non_existent_security_group_id()
@@ -131,6 +136,7 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
                           self.client.delete_security_group, non_exist_id)
 
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_delete_security_group_without_passing_id(self):
         # Negative test:Deletion of a Security Group with out passing ID
         # should Fail
@@ -140,6 +146,7 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
     @testtools.skipIf(CONF.service_available.neutron,
                       "Neutron not check the security_group_id")
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_update_security_group_with_invalid_sg_id(self):
         # Update security_group with invalid sg_id should fail
         s_name = data_utils.rand_name('sg-')
@@ -153,10 +160,10 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
     @testtools.skipIf(CONF.service_available.neutron,
                       "Neutron not check the security_group_name")
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_update_security_group_with_invalid_sg_name(self):
         # Update security_group with invalid sg_name should fail
-        resp, securitygroup = self.create_security_group()
-        self.assertEqual(200, resp.status)
+        securitygroup = self.create_security_group()
         self.assertIn('id', securitygroup)
         securitygroup_id = securitygroup['id']
         # Update Security Group with group name longer than 255 chars
@@ -168,10 +175,10 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
     @testtools.skipIf(CONF.service_available.neutron,
                       "Neutron not check the security_group_description")
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_update_security_group_with_invalid_sg_des(self):
         # Update security_group with invalid sg_des should fail
-        resp, securitygroup = self.create_security_group()
-        self.assertEqual(200, resp.status)
+        securitygroup = self.create_security_group()
         self.assertIn('id', securitygroup)
         securitygroup_id = securitygroup['id']
         # Update Security Group with group description longer than 255 chars
@@ -181,6 +188,7 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
                           securitygroup_id, description=s_new_des)
 
     @test.attr(type=['negative', 'smoke'])
+    @test.services('network')
     def test_update_non_existent_security_group(self):
         # Update a non-existent Security Group should Fail
         non_exist_id = self._generate_a_non_existent_security_group_id()
@@ -190,7 +198,3 @@ class SecurityGroupsNegativeTestJSON(base.BaseSecurityGroupsTest):
                           self.client.update_security_group,
                           non_exist_id, name=s_name,
                           description=s_description)
-
-
-class SecurityGroupsNegativeTestXML(SecurityGroupsNegativeTestJSON):
-    _interface = 'xml'

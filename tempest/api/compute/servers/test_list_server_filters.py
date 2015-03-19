@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest_lib import decorators
+
 from tempest.api.compute import base
 from tempest.api import utils
 from tempest.common.utils import data_utils
@@ -26,15 +28,14 @@ CONF = config.CONF
 class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
 
     @classmethod
-    @test.safe_setup
-    def setUpClass(cls):
+    def resource_setup(cls):
         cls.set_network_resources(network=True, subnet=True, dhcp=True)
-        super(ListServerFiltersTestJSON, cls).setUpClass()
+        super(ListServerFiltersTestJSON, cls).resource_setup()
         cls.client = cls.servers_client
 
         # Check to see if the alternate image ref actually exists...
         images_client = cls.images_client
-        resp, images = images_client.list_images()
+        images = images_client.list_images()
 
         if cls.image_ref != cls.image_ref_alt and \
             any([image for image in images
@@ -70,12 +71,12 @@ class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
         resp, cls.s3 = cls.create_test_server(name=cls.s3_name,
                                               flavor=cls.flavor_ref_alt,
                                               wait_until='ACTIVE')
-        if (CONF.service_available.neutron and
-                CONF.compute.allow_tenant_isolation):
-            network = cls.isolated_creds.get_primary_network()
-            cls.fixed_network_name = network['name']
-        else:
-            cls.fixed_network_name = CONF.compute.fixed_network_name
+
+        cls.fixed_network_name = CONF.compute.fixed_network_name
+        if CONF.service_available.neutron:
+            if hasattr(cls.isolated_creds, 'get_primary_network'):
+                network = cls.isolated_creds.get_primary_network()
+                cls.fixed_network_name = network['name']
 
     @utils.skip_unless_attr('multiple_images', 'Only one image found')
     @test.attr(type='gate')
@@ -144,7 +145,6 @@ class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
         # Verify only the expected number of servers are returned
         params = {'limit': 1}
         resp, servers = self.client.list_servers(params)
-        # when _interface='xml', one element for servers_links in servers
         self.assertEqual(1, len([x for x in servers['servers'] if 'id' in x]))
 
     @test.attr(type='gate')
@@ -234,6 +234,30 @@ class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
         self.assertNotIn(self.s3_name, map(lambda x: x['name'], servers))
 
     @test.attr(type='gate')
+    def test_list_servers_filtered_by_name_regex(self):
+        # list of regex that should match s1, s2 and s3
+        regexes = ['^.*\-instance\-[0-9]+$', '^.*\-instance\-.*$']
+        for regex in regexes:
+            params = {'name': regex}
+            resp, body = self.client.list_servers(params)
+            servers = body['servers']
+
+            self.assertIn(self.s1_name, map(lambda x: x['name'], servers))
+            self.assertIn(self.s2_name, map(lambda x: x['name'], servers))
+            self.assertIn(self.s3_name, map(lambda x: x['name'], servers))
+
+        # Let's take random part of name and try to search it
+        part_name = self.s1_name[-10:]
+
+        params = {'name': part_name}
+        resp, body = self.client.list_servers(params)
+        servers = body['servers']
+
+        self.assertIn(self.s1_name, map(lambda x: x['name'], servers))
+        self.assertNotIn(self.s2_name, map(lambda x: x['name'], servers))
+        self.assertNotIn(self.s3_name, map(lambda x: x['name'], servers))
+
+    @test.attr(type='gate')
     def test_list_servers_filtered_by_ip(self):
         # Filter servers by ip
         # Here should be listed 1 server
@@ -247,8 +271,8 @@ class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
         self.assertNotIn(self.s2_name, map(lambda x: x['name'], servers))
         self.assertNotIn(self.s3_name, map(lambda x: x['name'], servers))
 
-    @test.skip_because(bug="1182883",
-                       condition=CONF.service_available.neutron)
+    @decorators.skip_because(bug="1182883",
+                             condition=CONF.service_available.neutron)
     @test.attr(type='gate')
     def test_list_servers_filtered_by_ip_regex(self):
         # Filter servers by regex ip
@@ -270,7 +294,3 @@ class ListServerFiltersTestJSON(base.BaseV2ComputeTest):
         params = {'limit': 1}
         resp, servers = self.client.list_servers_with_detail(params)
         self.assertEqual(1, len(servers['servers']))
-
-
-class ListServerFiltersTestXML(ListServerFiltersTestJSON):
-    _interface = 'xml'

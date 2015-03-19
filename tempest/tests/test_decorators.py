@@ -97,6 +97,28 @@ class TestServicesDecorator(BaseDecoratorsTest):
                           self._test_services_helper, 'compute',
                           'volume')
 
+    def test_services_list(self):
+        service_list = test.get_service_list()
+        for service in service_list:
+            try:
+                self._test_services_helper(service)
+            except exceptions.InvalidServiceTag:
+                self.fail('%s is not listed in the valid service tag list'
+                          % service)
+            except KeyError:
+                # NOTE(mtreinish): This condition is to test for a entry in
+                # the outer decorator list but not in the service_list dict.
+                # However, because we're looping over the service_list dict
+                # it's unlikely we'll trigger this. So manual review is still
+                # need for the list in the outer decorator.
+                self.fail('%s is in the list of valid service tags but there '
+                          'is no corresponding entry in the dict returned from'
+                          ' get_service_list()' % service)
+            except testtools.TestCase.skipException:
+                # Test didn't raise an exception because of an incorrect list
+                # entry so move onto the next entry
+                continue
+
 
 class TestStressDecorator(BaseDecoratorsTest):
     def _test_stresstest_helper(self, expected_frequency='process',
@@ -126,70 +148,6 @@ class TestStressDecorator(BaseDecoratorsTest):
                                      expected_inheritance=True,
                                      class_setup_per='application',
                                      allow_inheritance=True)
-
-
-class TestSkipBecauseDecorator(BaseDecoratorsTest):
-    def _test_skip_because_helper(self, expected_to_skip=True,
-                                  **decorator_args):
-        class TestFoo(test.BaseTestCase):
-            _interface = 'json'
-
-            @test.skip_because(**decorator_args)
-            def test_bar(self):
-                return 0
-
-        t = TestFoo('test_bar')
-        if expected_to_skip:
-            self.assertRaises(testtools.TestCase.skipException, t.test_bar)
-        else:
-            # assert that test_bar returned 0
-            self.assertEqual(TestFoo('test_bar').test_bar(), 0)
-
-    def test_skip_because_bug(self):
-        self._test_skip_because_helper(bug='12345')
-
-    def test_skip_because_bug_and_interface_match(self):
-        self._test_skip_because_helper(bug='12346', interface='json')
-
-    def test_skip_because_bug_interface_not_match(self):
-        self._test_skip_because_helper(expected_to_skip=False,
-                                       bug='12347', interface='xml')
-
-    def test_skip_because_bug_and_condition_true(self):
-        self._test_skip_because_helper(bug='12348', condition=True)
-
-    def test_skip_because_bug_and_condition_false(self):
-        self._test_skip_because_helper(expected_to_skip=False,
-                                       bug='12349', condition=False)
-
-    def test_skip_because_bug_condition_false_and_interface_match(self):
-        """
-        Assure that only condition will be evaluated if both parameters are
-        passed.
-        """
-        self._test_skip_because_helper(expected_to_skip=False,
-                                       bug='12350', condition=False,
-                                       interface='json')
-
-    def test_skip_because_bug_condition_true_and_interface_not_match(self):
-        """
-        Assure that only condition will be evaluated if both parameters are
-        passed.
-        """
-        self._test_skip_because_helper(bug='12351', condition=True,
-                                       interface='xml')
-
-    def test_skip_because_bug_without_bug_never_skips(self):
-        """Never skip without a bug parameter."""
-        self._test_skip_because_helper(expected_to_skip=False,
-                                       condition=True)
-        self._test_skip_because_helper(expected_to_skip=False,
-                                       interface='json')
-
-    def test_skip_because_invalid_bug_number(self):
-        """Raise ValueError if with an invalid bug number"""
-        self.assertRaises(ValueError, self._test_skip_because_helper,
-                          bug='critical_bug')
 
 
 class TestRequiresExtDecorator(BaseDecoratorsTest):
@@ -237,7 +195,7 @@ class TestRequiresExtDecorator(BaseDecoratorsTest):
 class TestSimpleNegativeDecorator(BaseDecoratorsTest):
     @test.SimpleNegativeAutoTest
     class FakeNegativeJSONTest(test.NegativeAutoTest):
-        _schema_file = 'fake/schemas/file.json'
+        _schema = {}
 
     def test_testfunc_exist(self):
         self.assertIn("test_fake_negative", dir(self.FakeNegativeJSONTest))
@@ -247,4 +205,4 @@ class TestSimpleNegativeDecorator(BaseDecoratorsTest):
         obj = self.FakeNegativeJSONTest("test_fake_negative")
         self.assertIn("test_fake_negative", dir(obj))
         obj.test_fake_negative()
-        mock.assert_called_once_with(self.FakeNegativeJSONTest._schema_file)
+        mock.assert_called_once_with(self.FakeNegativeJSONTest._schema)

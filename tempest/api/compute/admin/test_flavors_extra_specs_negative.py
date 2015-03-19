@@ -28,8 +28,8 @@ class FlavorsExtraSpecsNegativeTestJSON(base.BaseV2ComputeAdminTest):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super(FlavorsExtraSpecsNegativeTestJSON, cls).setUpClass()
+    def resource_setup(cls):
+        super(FlavorsExtraSpecsNegativeTestJSON, cls).resource_setup()
         if not test.is_extension_enabled('OS-FLV-EXT-DATA', 'compute'):
             msg = "OS-FLV-EXT-DATA extension not enabled."
             raise cls.skipException(msg)
@@ -44,18 +44,18 @@ class FlavorsExtraSpecsNegativeTestJSON(base.BaseV2ComputeAdminTest):
         swap = 1024
         rxtx = 1
         # Create a flavor
-        resp, cls.flavor = cls.client.create_flavor(flavor_name,
-                                                    ram, vcpus,
-                                                    disk,
-                                                    cls.new_flavor_id,
-                                                    ephemeral=ephemeral,
-                                                    swap=swap, rxtx=rxtx)
+        cls.flavor = cls.client.create_flavor(flavor_name,
+                                              ram, vcpus,
+                                              disk,
+                                              cls.new_flavor_id,
+                                              ephemeral=ephemeral,
+                                              swap=swap, rxtx=rxtx)
 
     @classmethod
-    def tearDownClass(cls):
-        resp, body = cls.client.delete_flavor(cls.flavor['id'])
+    def resource_cleanup(cls):
+        cls.client.delete_flavor(cls.flavor['id'])
         cls.client.wait_for_resource_deletion(cls.flavor['id'])
-        super(FlavorsExtraSpecsNegativeTestJSON, cls).tearDownClass()
+        super(FlavorsExtraSpecsNegativeTestJSON, cls).resource_cleanup()
 
     @test.attr(type=['negative', 'gate'])
     def test_flavor_non_admin_set_keys(self):
@@ -70,9 +70,8 @@ class FlavorsExtraSpecsNegativeTestJSON(base.BaseV2ComputeAdminTest):
     def test_flavor_non_admin_update_specific_key(self):
         # non admin user is not allowed to update flavor extra spec
         specs = {"key1": "value1", "key2": "value2"}
-        resp, body = self.client.set_flavor_extra_spec(
+        body = self.client.set_flavor_extra_spec(
             self.flavor['id'], specs)
-        self.assertEqual(resp.status, 200)
         self.assertEqual(body['key1'], 'value1')
         self.assertRaises(exceptions.Unauthorized,
                           self.flavors_client.
@@ -84,8 +83,7 @@ class FlavorsExtraSpecsNegativeTestJSON(base.BaseV2ComputeAdminTest):
     @test.attr(type=['negative', 'gate'])
     def test_flavor_non_admin_unset_keys(self):
         specs = {"key1": "value1", "key2": "value2"}
-        set_resp, set_body = self.client.set_flavor_extra_spec(
-            self.flavor['id'], specs)
+        self.client.set_flavor_extra_spec(self.flavor['id'], specs)
 
         self.assertRaises(exceptions.Unauthorized,
                           self.flavors_client.unset_flavor_extra_spec,
@@ -125,7 +123,3 @@ class FlavorsExtraSpecsNegativeTestJSON(base.BaseV2ComputeAdminTest):
                           "key1",
                           key1="value",
                           key2="value")
-
-
-class FlavorsExtraSpecsNegativeTestXML(FlavorsExtraSpecsNegativeTestJSON):
-    _interface = 'xml'
